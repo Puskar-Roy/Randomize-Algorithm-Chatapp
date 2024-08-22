@@ -23,9 +23,11 @@ io.on('connection', (socket) => {
 
     socket.on('findChatPartner', () => {
         if (waitingQueue.length > 0) {
-            // If there are users waiting, randomly pair the current user with one of them
+            // Randomly pair the current user with one from the queue
             const randomIndex = Math.floor(Math.random() * waitingQueue.length);
             const partnerSocketId = waitingQueue.splice(randomIndex, 1)[0];
+
+            // Store the chat pair in activeChats
             activeChats[socket.id] = partnerSocketId;
             activeChats[partnerSocketId] = socket.id;
 
@@ -33,7 +35,7 @@ io.on('connection', (socket) => {
             socket.emit('connectedToChatPartner', partnerSocketId);
             io.to(partnerSocketId).emit('connectedToChatPartner', socket.id);
         } else {
-            // If no one is waiting, add the current user to the queue
+            // Add current user to the waiting queue if no one is waiting
             waitingQueue.push(socket.id);
         }
     });
@@ -41,6 +43,7 @@ io.on('connection', (socket) => {
     socket.on('sendMessage', (message) => {
         const partnerSocketId = activeChats[socket.id];
         if (partnerSocketId) {
+            // Send the message only to the partner, not to the sender
             io.to(partnerSocketId).emit('receiveMessage', {
                 from: socket.id,
                 text: message.text,
@@ -50,17 +53,19 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
-        
+
         const partnerSocketId = activeChats[socket.id];
 
-        // Remove from active chats and notify the partner if they exist
         if (partnerSocketId) {
+            // Notify the partner that their partner has disconnected
             io.to(partnerSocketId).emit('partnerDisconnected');
+
+            // Remove both users from the active chat pair
             delete activeChats[partnerSocketId];
             delete activeChats[socket.id];
         }
 
-        // Remove from waiting queue if they were waiting
+        // Remove the user from the waiting queue if they were waiting
         waitingQueue = waitingQueue.filter(id => id !== socket.id);
     });
 });
